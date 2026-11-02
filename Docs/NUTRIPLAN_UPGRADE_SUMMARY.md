@@ -15,8 +15,8 @@ Date: 2026-10-31
 - Project docs: `README.md`; this summary at `Docs/NUTRIPLAN_UPGRADE_SUMMARY.md`.
 - Backend: `FastAPI_Backend/config.py`, `FastAPI_Backend/main.py`, new `FastAPI_Backend/nutrition_planner.py`, `FastAPI_Backend/tests/test_api.py`, and new `FastAPI_Backend/tests/test_nutrition_planner.py`.
 - Frontend: `react_frontend/index.html`, `react_frontend/vite.config.ts`, `react_frontend/src/App.tsx`, `react_frontend/src/App.css`, `react_frontend/src/components/Navbar.tsx`, new `react_frontend/src/components/RecipeTile.tsx`, `react_frontend/src/lib/api.ts`, `react_frontend/src/pages/DietRecommendation.tsx`, `react_frontend/src/pages/Index.tsx`, `react_frontend/src/types/recipe.ts`, and new `react_frontend/src/pages/GymPlanner.tsx`, `react_frontend/src/pages/RecipeExplorer.tsx`, and `react_frontend/src/pages/MyPlan.tsx`.
-- The existing virtual environment at `FastAPI_Backend/.venv` was repaired in place to use the installed Python 3.12.10. Requirements files and package manifests were not changed.
-- `Data/dataset.csv` and existing recommendation/data files were not modified. A pre-change source snapshot is in `Docs/backups/nutriplan-upgrade-2026-10-31/`. The project directory has no Git metadata, so the snapshot is the rollback copy.
+- The existing virtual environment at `FastAPI_Backend/.venv` was repaired in place to use the installed Python 3.12.10. A later chatbot repair added `python-dotenv` to the backend requirements; frontend package manifests were not changed.
+- `Data/dataset.csv` and existing recommendation/data files were not modified. A pre-change source snapshot is in `Docs/backups/nutriplan-upgrade-2026-10-31/`.
 
 ## Commands executed
 
@@ -52,6 +52,17 @@ PowerShell live checks used `Invoke-WebRequest` for `/`, `/health`, `/docs`, `/o
 - One initial test payload used unsupported activity text `Moderately Active` and received HTTP 422. Retrying with the configured value `Moderate exercise (3-5 days/wk)` returned HTTP 200.
 - A live test exposed missing seafood terms and plural forms in the vegetarian screen; these were fixed, covered by regression tests, and rechecked against the real dataset.
 - A final visual inspection in the existing browser was stopped by the physical Escape-key interruption. No further UI automation was performed; browser URL/HTTP checks and frontend build/tests passed.
+
+## Deployment preparation update — 2026-11-02
+
+- The original project folder had no Git metadata or remote. After reviewing the staged contents and confirming that environment files, virtual environments, dependency folders, caches, and build output were excluded, Git was initialized on `main` and the local initial commit `e749f9e` (`Prepare NutriPlan for deployment`) was created. The working tree is clean; no remote is configured and no push was made.
+- The original dataset remains tracked at `Data/dataset.csv` (95,111,774 bytes). The private `react_frontend/.env` remains local and ignored; no provider-key pattern was found in staged text.
+- A safe sibling backup was created at `C:\Users\Adi\Downloads\nutrimind-main\NutriPlan-backup-2026-11-02` (186 files, 95.73 MiB), excluding `.env` files, virtual environments, dependencies, caches, logs, and generated builds.
+- Root `.python-version` pins Python 3.12.10. `.gitignore` now excludes local environment files and generated artifacts while allowing `.env.example`.
+- Deployment setup for separate Render static and FastAPI services is documented in the README. No public deployment was made. The connected GitHub profile had no visible repositories; the available GitHub integration cannot create a repository, `gh` and Docker are not installed, and there are no hosting credentials configured.
+- Current local checks: frontend `/` returned HTTP 200; FastAPI `/`, `/docs`, `/openapi.json`, `/health`, and `/api/chat/health` each returned HTTP 200. Chat readiness reports `missing_configuration`; a valid chat request returns HTTP 503 until the user configures `OPENAI_API_KEY` in the root `.env` and restarts FastAPI.
+- Current automated checks: backend **60 passed**; frontend **22 passed**; Ruff and TypeScript passed; Vite production build passed; ESLint reported zero errors and seven Fast Refresh warnings in existing UI components.
+- The current connected GitHub account is `anurag-501`, but no private NutriPlan repository has been created. To continue, create a private repository named `NutriPlan` without initializing it with extra files, then add its URL as the `origin` remote and push `main`. Configure the Render service variables described in the README after hosting assigns the service URLs.
 
 ## Current URLs and restart commands
 
