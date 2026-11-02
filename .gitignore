@@ -1,0 +1,40 @@
+# Python environments, bytecode, test and lint caches
+.venv/
+venv/
+env/
+__pycache__
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Frontend dependencies and generated builds
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+playwright-report/
+
+# Local logs and editor / OS artifacts
+*.log
+.DS_Store
+Thumbs.db
+
+# Private environment files; only templates may be committed
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Existing project-specific local / sensitive files
+FastAPI_Backend/test.py
+FastAPI_Backend/keys.py
+FastAPI_Backend/data.py
+test.py
+test.ipynb
+.coverage
+CLAUDE.md
+.claudeignore
