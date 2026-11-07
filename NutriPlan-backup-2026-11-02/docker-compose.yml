@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: FastAPI_Backend/Dockerfile
+    image: nutriplan-backend:local
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      PORT: "8080"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-35}
+      OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-1}
+      OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-1400}
+      CHAT_RATE_LIMIT_PER_MINUTE: ${CHAT_RATE_LIMIT_PER_MINUTE:-12}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    networks:
+      - project_network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./react_frontend
+      dockerfile: Dockerfile
+    image: nutriplan-frontend:local
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - project_network
+    depends_on:
+      backend:
+        condition: service_healthy
+
+networks:
+  project_network:

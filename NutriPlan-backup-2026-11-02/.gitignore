@@ -1,0 +1,16 @@
+__pycache__
+FastAPI_Backend/test.py
+FastAPI_Backend/keys.py
+FastAPI_Backend/data.py
+test.py
+test.ipynb
+.coverage
+CLAUDE.md
+.claudeignore
+.env
+.env.*
+!.env.example
+# Also ignore private dotenv files placed in nested app directories.
+**/.env
+**/.env.*
+!**/.env.example
