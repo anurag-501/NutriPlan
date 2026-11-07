@@ -1,7 +1,11 @@
 import type { Recipe, MealPlan, GymPlan, GymPlanRequest, RecipeSearchFilters, RecipeSearchResponse } from "@/types/recipe";
 import type { ChatHealth, ChatPlanActionResponse, ChatProfile, ChatResponse, ChatTurn, PlanMealSelection } from "@/types/chat";
+import { resolveApiBaseUrl } from "@/lib/apiConfig";
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "";
+const API_BASE_URL = resolveApiBaseUrl(
+  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL,
+  import.meta.env.PROD,
+);
 const DEFAULT_API_TIMEOUT_MS = 30_000;
 const CHAT_HEALTH_TIMEOUT_MS = 8_000;
 // Backend provider calls can include up to three validated tool round-trips.
@@ -15,17 +19,30 @@ export class ApiError extends Error {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_API_TIMEOUT_MS): Promise<T> {
+  if (API_BASE_URL.error) throw new ApiError(503, API_BASE_URL.error);
+
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${BASE_URL}${path}`, {
-      headers: { "Content-Type": "application/json" },
+    const headers = new Headers(init?.headers);
+    if (init?.body != null && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    const res = await fetch(`${API_BASE_URL.baseUrl}${path}`, {
       ...init,
+      headers,
       signal: controller.signal,
     });
     if (!res.ok) {
-      const body = await res.text();
-      throw new ApiError(res.status, body);
+      let message = `API request failed with status ${res.status}.`;
+      try {
+        const body = await res.json() as { detail?: unknown; message?: unknown };
+        if (typeof body.detail === "string") message = body.detail;
+        else if (typeof body.message === "string") message = body.message;
+      } catch {
+        // Do not surface HTML proxy pages or raw infrastructure responses.
+      }
+      throw new ApiError(res.status, message);
     }
     try {
       return await res.json() as T;
@@ -35,6 +52,9 @@ async function apiFetch<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT
   } catch (error) {
     if (controller.signal.aborted) {
       throw new ApiError(408, `The request timed out after ${Math.ceil(timeoutMs / 1000)} seconds. Please retry.`);
+    }
+    if (error instanceof TypeError) {
+      throw new ApiError(503, "Cannot reach the NutriPlan API. Check the deployed backend URL and CORS settings.");
     }
     throw error;
   } finally {

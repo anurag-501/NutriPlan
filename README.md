@@ -127,6 +127,12 @@ The backend loads `Data/dataset.csv` (about 95 MB) when it starts. For the origi
 
 The backend loads configuration from its process environment and the project-root `.env` file. Existing process environment variables take precedence. Keep all backend secrets out of Vite environment variables. If a `.env` already exists, preserve it and edit only the settings you need. `OPENAI_API_KEY` is optional and is used only when `AI_PROVIDER=openai` is explicitly selected; it is never sent to the browser.
 
+### Deploy the React frontend to Vercel
+
+Use the existing GitHub repository and Vercel project. In Vercel Project Settings, set **Root Directory** to `react_frontend`; the checked-in `react_frontend/vercel.json` sets the Vite build command, `dist` output, and client-side route fallback. Set the Production environment variable `VITE_API_BASE_URL` to the real FastAPI HTTPS origin (for example, the actual URL assigned by your backend host). The variable contains only a public URL; never put an API key, `API_ADMIN_TOKEN`, or other secret in a `VITE_*` variable. The legacy `VITE_API_URL` is still accepted for existing Vercel settings, but `VITE_API_BASE_URL` is the documented name. A production build refuses to send requests to a relative path, HTTP origin, or localhost when the base URL is missing or unsafe. After setting the URL, redeploy the Vercel frontend.
+
+Set FastAPI's `CORS_ORIGINS` to the exact deployed Vercel HTTPS origin (no wildcard), and keep its `API_ADMIN_TOKEN` and model credentials in the backend host's secret settings. The Vercel deployment check only confirms that a frontend deployment completed; it does not deploy FastAPI or prove the frontend can call it. Verify the public backend and browser network requests with the smoke script below.
+
 ### Run with Docker Compose
 
 Install [Docker Desktop](https://docs.docker.com/get-docker/) with Compose, then run from the repository root:
@@ -157,9 +163,9 @@ Render can host the Vite build as a static site and FastAPI as a Python web serv
 - Root Directory: `react_frontend`
 - Build Command: `npm ci && npm run build`
 - Publish Directory: `dist`
-- Build environment: `VITE_API_URL` set to the FastAPI service's HTTPS URL, such as `https://<your-api-service>.onrender.com`.
+- Build environment: `VITE_API_BASE_URL` set to the FastAPI service's HTTPS origin, such as `https://<your-api-service>.onrender.com`.
 
-Set `VITE_API_URL` on the static site and `CORS_ORIGINS` on FastAPI after Render assigns the service URLs, then redeploy both. Never put API admin tokens, client keys, or `OPENAI_API_KEY` on the static site. Persist the backend SQLite directory across restarts or set up PostgreSQL before scaling beyond a single instance. Render's free web services can spin down after inactivity; choose an appropriate instance for continuous availability. See [Render's FastAPI guide](https://render.com/docs/deploy-fastapi), [Python version settings](https://render.com/docs/python-version), and [free-service limits](https://render.com/docs/free).
+Set `VITE_API_BASE_URL` on the static site and `CORS_ORIGINS` on FastAPI after Render assigns the service URLs, then redeploy both. Never put API admin tokens, client keys, or `OPENAI_API_KEY` on the static site. Persist the backend SQLite directory across restarts or set up PostgreSQL before scaling beyond a single instance. Render's free web services can spin down after inactivity; choose an appropriate instance for continuous availability. See [Render's FastAPI guide](https://render.com/docs/deploy-fastapi), [Python version settings](https://render.com/docs/python-version), and [free-service limits](https://render.com/docs/free).
 
 ### Hosted Version
 
@@ -217,6 +223,24 @@ The estimator uses Mifflin–St Jeor for adult resting-energy estimates and the 
 ## Reusable API platform
 
 The versioned REST API reuses the existing nutrition and recipe services rather than copying their data. OpenAPI is available at `/docs`; API v1 routes are under `/api/v1`. The local database uses Python's SQLite support, so it does not need a paid database service for one local instance. API keys are shown once, stored as salted PBKDF2 hashes, and can be revoked. A project can set its own name, enabled modules, request rate, and assistant instructions. Project chat is isolated by API client key; history is stored only when explicitly requested.
+
+The NutriPlan React screens currently call the same FastAPI application through the legacy public app routes (`/recipes`, `/nutrition/calculate`, `/api/chat`, and related paths). The reusable `/api/v1` platform is served by that app but is intended for trusted API consumers: protected endpoints require a project API key. Do not embed that key in Vercel/browser code. The primary app does not currently provide user login or cloud-owned user accounts; saved plans, progress, and meal logs use browser `localStorage` and stay on that device. The platform SQLite database contains project/client/usage metadata and consented API chat history, not those browser-only app records.
+
+### Production smoke checks
+
+After the backend and frontend host URLs are known, run the non-destructive smoke checks from the repository root. They report endpoint, method, status, response time, and failures. `--include-ai` sends one test-only prompt to the configured provider and verifies a real response; it can take up to the provider timeout. An API-platform key is optional and is read only from the environment, never printed.
+
+```powershell
+$env:NUTRIPLAN_SMOKE_BASE_URL = "https://<actual-fastapi-host>"
+$env:NUTRIPLAN_SMOKE_ORIGIN = "https://<actual-vercel-domain>"
+# Optional, only if a client API key already exists:
+# $env:NUTRIPLAN_SMOKE_API_KEY = "<client-key>"
+py -3.12 scripts/production_smoke.py --include-ai
+Remove-Item Env:NUTRIPLAN_SMOKE_BASE_URL, Env:NUTRIPLAN_SMOKE_ORIGIN -ErrorAction SilentlyContinue
+Remove-Item Env:NUTRIPLAN_SMOKE_API_KEY -ErrorAction SilentlyContinue
+```
+
+The script checks liveness/readiness, provider status, recipe search/details, nutrition estimates/totals, plan generation, FoodSwap, authentication enforcement, and CORS preflight. A real production AI call, a valid authenticated project key, and the Vercel origin cannot be verified until those services/settings exist and are reachable.
 
 Core routes:
 

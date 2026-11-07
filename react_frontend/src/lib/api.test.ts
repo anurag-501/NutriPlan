@@ -46,4 +46,32 @@ describe("frontend API client", () => {
       signal: expect.any(AbortSignal),
     }));
   });
+
+  it("translates a network failure and does not add JSON content type to a GET", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getChatHealth()).rejects.toMatchObject({
+      name: "ApiError",
+      status: 503,
+      message: expect.stringContaining("deployed backend URL and CORS"),
+    });
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(new Headers(request.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("shows safe API detail text without exposing non-JSON proxy pages", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: "The selected AI provider is unavailable." }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getChatHealth()).rejects.toMatchObject({
+      name: "ApiError",
+      status: 503,
+      message: "The selected AI provider is unavailable.",
+    });
+  });
 });
