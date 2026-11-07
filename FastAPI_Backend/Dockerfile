@@ -27,6 +27,6 @@ USER app
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD-SHELL curl -fsS "http://127.0.0.1:${PORT:-8080}/health" || exit 1
+    CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/health" || exit 1
 
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
