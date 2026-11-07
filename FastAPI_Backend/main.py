@@ -9,6 +9,8 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+import platform_store
+from api_v1 import router as api_v1_router
 from chat_api import router as chat_router
 from chat_service import ChatService
 from config import (
@@ -30,10 +32,10 @@ from nutrition_planner import (
     DATASET_SOURCE,
     EGG_TERMS,
     NON_VEGAN_TERMS,
-    NON_VEGETARIAN_TERMS,
     build_gym_plan,
     calculate_gym_targets,
     contains_any_food_term,
+    has_non_vegetarian_food,
     paged_recipe_search,
     recipe_record,
 )
@@ -60,7 +62,7 @@ async def lifespan(app: FastAPI):
         food_texts = zip(dataset['Name'].values, dataset['RecipeIngredientParts'].values)
         diet_flags = [
             (
-                contains_any_food_term(f"{name} {ingredients}", NON_VEGETARIAN_TERMS),
+                has_non_vegetarian_food(name, ingredients),
                 contains_any_food_term(f"{name} {ingredients}", EGG_TERMS),
                 contains_any_food_term(f"{name} {ingredients}", NON_VEGAN_TERMS),
             )
@@ -70,6 +72,7 @@ async def lifespan(app: FastAPI):
         dataset['_has_egg'] = [flag[1] for flag in diet_flags]
         dataset['_has_non_vegan'] = [flag[2] for flag in diet_flags]
     app.state.dataset = dataset
+    platform_store.initialize_database()
     app.state.chat_service = ChatService()
     yield
     await app.state.chat_service.close()
@@ -102,11 +105,12 @@ def _cors_origins() -> list[str]:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Admin-Token"],
 )
 
 app.include_router(chat_router)
+app.include_router(api_v1_router)
 _foodswap_limiter = FoodSwapRateLimiter()
 
 

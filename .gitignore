@@ -7,6 +7,12 @@ __pycache__
 .pytest_cache/
 .ruff_cache/
 .coverage
+FastAPI_Backend/data/*.sqlite3
+FastAPI_Backend/data/*.db
+*.sqlite
+*.sqlite3
+# Optional local model caches should never enter source control.
+ollama_models/
 
 # Frontend dependencies and generated builds
 node_modules/

@@ -43,11 +43,12 @@ export interface ChatResponse {
 }
 
 export interface ChatHealth {
-  provider: "openai";
+  provider: "ollama" | "openai" | string;
   configured: boolean;
-  status?: "missing_configuration" | "configured_unverified" | "available" | "invalid_credentials" | "permission_denied" | "model_unavailable" | "provider_rate_limited" | "quota_exceeded" | "timeout" | "connection_error" | "provider_unavailable" | "provider_error";
+  status?: "missing_configuration" | "configured_unverified" | "available" | "invalid_configuration" | "invalid_credentials" | "permission_denied" | "model_unavailable" | "provider_rate_limited" | "quota_exceeded" | "timeout" | "connection_error" | "provider_unavailable" | "provider_error";
   status_message?: string;
   model: string;
+  available_models?: string[];
   history: string;
 }
 

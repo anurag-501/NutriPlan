@@ -243,18 +243,19 @@ export default function NutriPlanChat() {
 
   const status = healthError ? "backend_offline" : health?.status ?? (health?.configured ? "configured_unverified" : "missing_configuration");
   const statusLabels: Record<string, string> = {
-    available: `AI responded · ${health?.model ?? "OpenAI"}`,
+    available: health?.provider === "ollama" ? `Local AI ready · ${health?.model ?? "Ollama"}` : `AI responded · ${health?.model ?? "OpenAI"}`,
     configured_unverified: "AI configured · not checked",
-    missing_configuration: "AI setup needed",
+    missing_configuration: "AI provider configuration missing",
+    invalid_configuration: "AI configuration invalid",
     invalid_credentials: "OpenAI key rejected",
     permission_denied: "Model access unavailable",
-    model_unavailable: "Configured model unavailable",
+    model_unavailable: health?.provider === "ollama" ? "Local model not installed" : "Configured model unavailable",
     provider_rate_limited: "OpenAI rate limited",
     quota_exceeded: "OpenAI quota or billing issue",
-    timeout: "OpenAI request timed out",
-    connection_error: "OpenAI connection problem",
-    provider_unavailable: "OpenAI temporarily unavailable",
-    provider_error: "OpenAI request failed",
+    timeout: "AI request timed out",
+    connection_error: health?.provider === "ollama" ? "Local Ollama is offline" : "AI provider connection problem",
+    provider_unavailable: "AI provider temporarily unavailable",
+    provider_error: "AI request failed",
     backend_offline: "API offline",
   };
   const readyLabel = statusLabels[status] ?? "AI status unknown";
@@ -318,7 +319,7 @@ export default function NutriPlanChat() {
           <textarea id="nutriplan-chat-input" ref={inputRef} rows={2} maxLength={CHAT_LIMIT} value={composer} onChange={(event) => setComposer(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(composer); } }} placeholder="Ask about meals, recipes, or nutrition…" className="max-h-28 min-h-10 flex-1 resize-y bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground" />
           <button type="button" disabled={busy || !composer.trim()} onClick={() => void sendMessage(composer)} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground disabled:opacity-45" aria-label="Send message"><Send className="h-4 w-4" /></button>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{healthError ? "Backend connection unavailable." : status === "missing_configuration" ? "Set up the server-side OpenAI key to enable AI replies." : status === "configured_unverified" ? "Provider access is not confirmed yet. Check status or send a message." : "Messages and only the profile fields you enter are sent to OpenAI when you send a request. NutriPlan does not store chat history."}</span><span className="shrink-0">{composer.length}/{CHAT_LIMIT}</span></div>
+        <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{healthError ? "Backend connection unavailable." : status === "missing_configuration" ? "The optional external provider is not configured." : status === "invalid_configuration" ? "Check the backend AI_PROVIDER and local model settings." : status === "model_unavailable" ? `Install ${health?.model ?? "the configured model"} in Ollama to enable chat replies.` : status === "connection_error" ? "Start Ollama on the backend machine and check OLLAMA_BASE_URL." : status === "configured_unverified" ? "Provider access is not confirmed yet. Check status or send a message." : health?.provider === "ollama" ? "Messages and entered profile fields are sent to your configured local Ollama service. This chat stays in this page session." : "Messages and entered profile fields are sent to the explicitly configured OpenAI provider. NutriPlan does not store this chat."}</span><span className="shrink-0">{composer.length}/{CHAT_LIMIT}</span></div>
       </div>
 
       {confirmClear && <div className="absolute inset-0 z-10 grid place-items-center bg-black/45 p-4">

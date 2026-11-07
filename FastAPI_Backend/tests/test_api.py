@@ -10,10 +10,11 @@ FAKE_IMAGE_URL = "http://test-image.example.com/img.jpg"
 
 
 @pytest.fixture
-def client(mock_dataset, monkeypatch):
+def client(mock_dataset, monkeypatch, tmp_path):
     import main
     monkeypatch.setattr(main, "dataset", mock_dataset)
     monkeypatch.setattr(main, "get_image_url", lambda _: FAKE_IMAGE_URL)
+    monkeypatch.setenv("NUTRIPLAN_DB_PATH", str(tmp_path / "api-platform.sqlite3"))
     from fastapi.testclient import TestClient
     with TestClient(main.app) as client:
         yield client

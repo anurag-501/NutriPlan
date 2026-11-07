@@ -56,7 +56,7 @@ def mock_dataset() -> pd.DataFrame:
 
 
 @pytest.fixture
-def client(mock_dataset, monkeypatch):
+def client(mock_dataset, monkeypatch, tmp_path):
     """FastAPI test client backed by a small, deterministic recipe dataset."""
     from fastapi.testclient import TestClient
 
@@ -64,5 +64,6 @@ def client(mock_dataset, monkeypatch):
 
     monkeypatch.setattr(main, "dataset", mock_dataset)
     monkeypatch.setattr(main, "get_image_url", lambda _: "http://test-image.example.com/img.jpg")
+    monkeypatch.setenv("NUTRIPLAN_DB_PATH", str(tmp_path / "api-platform.sqlite3"))
     with TestClient(main.app) as test_client:
         yield test_client

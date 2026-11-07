@@ -4,6 +4,7 @@ from nutrition_planner import (
     build_gym_plan,
     calculate_gym_targets,
     filter_recipe_frame,
+    has_non_vegetarian_food,
     paged_recipe_search,
     recipe_record,
 )
@@ -114,6 +115,28 @@ def test_vegetarian_filter_excludes_sardine_crabmeat_and_seafood_titles():
     ]).drop(columns=["_has_non_vegetarian", "_has_egg"])
     filtered = filter_recipe_frame(data, dietary_preference="vegetarian")
     assert list(filtered["RecipeId"]) == [7]
+
+
+def test_vegetarian_filter_conservatively_excludes_carne_and_worcestershire():
+    data = pd.DataFrame([
+        make_row(11, "Chili Con Carne", ["tomato", "beans"], 380, 28),
+        make_row(12, "Cola Roast", ["Worcestershire sauce", "cola"], 420, 35),
+        make_row(13, "Dijon Pesto Steak", ["top round steaks"], 380, 34),
+        make_row(14, "Philadelphia Scrapple", ["cornmeal", "flour"], 360, 20),
+        make_row(15, "Easiest Hamburger Soup", ["hamburger", "potatoes"], 390, 25),
+        make_row(16, "Roasted Red Snapper", ["red snapper", "lemon"], 310, 30),
+        make_row(17, "Orange Roughy With Vegetables", ["potatoes"], 310, 25),
+        make_row(18, "San Francisco Chops", ["broth", "soy sauce"], 310, 25),
+        make_row(19, "A Real Philly Cheesesteak", ["onion", "mushroom", "provolone"], 410, 25),
+        make_row(20, "Three Bean Chili", ["tomato", "beans", "corn"], 310, 16),
+    ])
+    # Match the startup-cached classification used by FastAPI's real dataset.
+    data["_has_non_vegetarian"] = data.apply(
+        lambda row: has_non_vegetarian_food(row["Name"], row["RecipeIngredientParts"]),
+        axis=1,
+    )
+    filtered = filter_recipe_frame(data, dietary_preference="vegetarian")
+    assert list(filtered["RecipeId"]) == [20]
 
 
 def test_search_filters_calories_protein_ingredients_time_and_category():

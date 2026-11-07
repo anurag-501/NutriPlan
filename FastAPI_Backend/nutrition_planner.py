@@ -35,7 +35,9 @@ NON_VEGETARIAN_TERMS = (
     "shrimp", "prawn", "crab", "crabmeat", "crab meat", "lobster", "clam", "mussel",
     "oyster", "scallop", "squid", "octopus", "calamari", "crawfish", "crayfish",
     "gelatin", "lard", "bacon", "ham", "sausage", "pancetta", "prosciutto", "chorizo",
-    "pepperoni", "salami", "liver", "caviar", "roe", "lox",
+    "pepperoni", "salami", "liver", "caviar", "roe", "lox", "carne", "worcestershire",
+    "steak", "cheesesteak", "hamburger", "burger", "scrapple", "veal", "snapper", "orange roughy",
+    "chop", "sirloin", "pot roast",
 )
 EGG_TERMS = ("egg", "eggs", "egg white", "egg yolk", "mayonnaise")
 NON_VEGAN_TERMS = ("milk", "buttermilk", "butter", "cream", "cheese", "yogurt", "yoghurt", "curd", "paneer", "ghee", "egg", "honey", "whey", "casein")
@@ -65,6 +67,11 @@ def _food_terms_pattern(terms: tuple[str, ...]) -> re.Pattern[str]:
 
 def contains_any_food_term(text: str, terms: tuple[str, ...]) -> bool:
     return _food_terms_pattern(terms).search(str(text)) is not None
+
+
+def has_non_vegetarian_food(name: str, ingredients: str) -> bool:
+    """Conservatively screen recipe names and ingredient text for animal foods."""
+    return contains_any_food_term(f"{name} {ingredients}", NON_VEGETARIAN_TERMS)
 
 
 def _ingredients(row: Any) -> frozenset[str]:
@@ -176,8 +183,9 @@ def filter_recipe_frame(
             frame = frame.loc[~frame["_has_non_vegetarian"]]
         else:
             frame = frame.loc[~frame.apply(
-                lambda row: any(contains_food_term(row["Name"], term) for term in NON_VEGETARIAN_TERMS)
-                or any(contains_food_term(item, term) for term in NON_VEGETARIAN_TERMS for item in row["_ingredients_parsed"]),
+                lambda row: has_non_vegetarian_food(
+                    row["Name"], " ".join(row["_ingredients_parsed"])
+                ),
                 axis=1,
             )]
         if frame.empty:

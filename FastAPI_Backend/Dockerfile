@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY --chown=app:app FastAPI_Backend/ /app/backend/
 COPY --chown=app:app Data/ /app/Data/
+RUN mkdir -p /app/backend/data && chown app:app /app/backend/data
 
 WORKDIR /app/backend
 USER app

@@ -135,6 +135,15 @@ describe("NutriPlan AI chat", () => {
     expect(screen.queryByText("AI responded · test-model")).not.toBeInTheDocument();
   });
 
+  it("distinguishes an unavailable local model from an offline backend", async () => {
+    getChatHealth.mockResolvedValueOnce({ provider: "ollama", configured: true, status: "model_unavailable", model: "qwen3:4b", history: "session only" });
+    render(<NutriPlanChat />);
+    fireEvent.click(screen.getByRole("button", { name: "Open NutriPlan AI chat" }));
+    expect(await screen.findByText("Local model not installed")).toBeInTheDocument();
+    expect(screen.queryByText("API offline")).not.toBeInTheDocument();
+    expect(screen.getByText(/Install qwen3:4b in Ollama/)).toBeInTheDocument();
+  });
+
   it("lets the user dismiss an error without retrying", async () => {
     sendChat.mockRejectedValueOnce(new Error("network unavailable"));
     render(<NutriPlanChat />);

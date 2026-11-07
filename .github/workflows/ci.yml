@@ -25,7 +25,8 @@ jobs:
           pip install -r FastAPI_Backend/requirements.txt -r FastAPI_Backend/requirements-dev.txt
 
       - name: Lint with ruff
-        run: ruff check FastAPI_Backend/
+        working-directory: FastAPI_Backend
+        run: ruff check .
 
       - name: Run tests with coverage
         run: pytest FastAPI_Backend/tests/ -v --cov=FastAPI_Backend --cov-report=xml

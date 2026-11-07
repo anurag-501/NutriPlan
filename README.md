@@ -99,7 +99,7 @@ At startup, each recipe's ingredient list is pre-parsed into a `frozenset` of lo
 
 ### Run locally on Windows
 
-Install Python 3.12 and Node.js 20 first. Open two PowerShell windows in the repository root.
+Install Python 3.12, Node.js 20, and (for local AI replies) Ollama. Open two PowerShell windows in the repository root.
 
 In the first window, start the FastAPI backend:
 
@@ -108,7 +108,6 @@ cd FastAPI_Backend
 if (Test-Path .venv) { py -3.12 -m venv --upgrade .venv } else { py -3.12 -m venv .venv }
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 if (!(Test-Path ..\.env)) { Copy-Item ..\.env.example ..\.env }
-notepad ..\.env
 .\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8080
 ```
 
@@ -120,13 +119,13 @@ npm.cmd install
 npm.cmd run dev -- --host 127.0.0.1 --port 5174
 ```
 
-Add your private `OPENAI_API_KEY` to the project-root `.env` when Notepad opens. Leave existing settings intact; only add or edit the needed lines. Saving `.env` requires restarting FastAPI.
+The API and deterministic recommendation features work without an AI credential. To enable local chatbot inference, install/start Ollama, then run `ollama pull qwen3:4b-instruct-2507-q4_K_M` in a separate PowerShell window. Keep `AI_PROVIDER=ollama` and `OLLAMA_MODEL=qwen3:4b-instruct-2507-q4_K_M` in the project-root `.env`. This non-thinking 4B model supports tool use; inference is local and response speed depends on hardware. Without Ollama or the selected model, the backend stays online and reports AI as unavailable; it does not fake an AI reply.
 
 Open **http://localhost:5174**. The Vite dev server proxies API requests to FastAPI on port 8080. API docs are at **http://localhost:8080/docs**. PowerShell users can use `npm.cmd` if their execution policy blocks `npm.ps1`.
 
 The backend loads `Data/dataset.csv` (about 95 MB) when it starts. For the original Streamlit frontend, install `Streamlit_Frontend/requirements.txt` and run `streamlit run Hello.py` from `Streamlit_Frontend`.
 
-The backend loads configuration from its process environment and, when present, the project-root `.env` file. Existing process environment variables take precedence. `python-dotenv` is installed from `FastAPI_Backend/requirements.txt`; do not put the OpenAI key in a Vite `.env` file. If a `.env` already exists, preserve it and edit only the needed server-side settings. Never paste the key into chat, logs, screenshots, or source control.
+The backend loads configuration from its process environment and the project-root `.env` file. Existing process environment variables take precedence. Keep all backend secrets out of Vite environment variables. If a `.env` already exists, preserve it and edit only the settings you need. `OPENAI_API_KEY` is optional and is used only when `AI_PROVIDER=openai` is explicitly selected; it is never sent to the browser.
 
 ### Run with Docker Compose
 
@@ -138,7 +137,7 @@ docker compose up --build
 
 Open **http://localhost**. Compose builds the React frontend and FastAPI backend; Nginx proxies the app's planner, recipe, FoodSwap, and chat API paths to FastAPI on the private Docker network. Only the frontend is published on the host. Check **http://localhost/health** for backend health through that proxy. Interactive API docs remain available at `http://127.0.0.1:8080/docs` in the separate local development setup above.
 
-Compose reads the root `.env` for interpolation and passes only the documented server settings into the backend container. Keep `.env` private. The Compose stack does not terminate HTTPS; a production host or reverse proxy must provide HTTPS. The existing GitHub Actions CD workflow builds and pushes container images; it does not provision or deploy a hosting service. The application has no database or server-persisted chat history.
+Compose reads the root `.env` for interpolation and passes server settings into the backend container. It stores API project configuration, hashed client keys, usage counters, and only explicitly opted-in API chat history in a local SQLite database volume/path. Keep `.env` private. Ollama is not bundled in this Compose stack; configure a private, reachable Ollama service with `OLLAMA_BASE_URL` if local inference is needed in containers. Do not publish an unauthenticated Ollama port to the internet. The Compose stack does not terminate HTTPS; a production host or reverse proxy must provide HTTPS. The existing GitHub Actions CD workflow builds and pushes container images; it does not provision or deploy a hosting service.
 
 ### Deploy to Render (separate React and FastAPI services)
 
@@ -151,7 +150,7 @@ Render can host the Vite build as a static site and FastAPI as a Python web serv
 - Build Command: `pip install -r FastAPI_Backend/requirements.txt`
 - Start Command: `cd FastAPI_Backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
 - Health Check Path: `/health`
-- Server environment: `OPENAI_API_KEY` (secret, entered in Render), `OPENAI_MODEL` (optional; default `gpt-6-luna`), and `CORS_ORIGINS` set to the exact HTTPS origin assigned to the frontend.
+- Server environment: `AI_PROVIDER=ollama`, a privately reachable `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `API_ADMIN_TOKEN` (secret), a persistent disk for SQLite, and `CORS_ORIGINS` set to the exact HTTPS origin assigned to the frontend. A model running only on your laptop is not reachable from Render by default. Do not expose Ollama directly to the public internet. Alternatively, explicitly opt in to `AI_PROVIDER=openai` and configure `OPENAI_API_KEY` server-side.
 
 **React static site**
 
@@ -160,7 +159,7 @@ Render can host the Vite build as a static site and FastAPI as a Python web serv
 - Publish Directory: `dist`
 - Build environment: `VITE_API_URL` set to the FastAPI service's HTTPS URL, such as `https://<your-api-service>.onrender.com`.
 
-Set `VITE_API_URL` on the static site and `CORS_ORIGINS` on FastAPI after Render assigns the service URLs, then redeploy both. Never set `OPENAI_API_KEY` on the static site. This project has no server-side database requirement; saved plans and related user data remain in each browser. Render's free web services can spin down after inactivity and are documented as unsuitable for production uptime; choose an appropriate paid backend instance if continuous availability is required. See [Render's FastAPI guide](https://render.com/docs/deploy-fastapi), [Python version settings](https://render.com/docs/python-version), and [free-service limits](https://render.com/docs/free).
+Set `VITE_API_URL` on the static site and `CORS_ORIGINS` on FastAPI after Render assigns the service URLs, then redeploy both. Never put API admin tokens, client keys, or `OPENAI_API_KEY` on the static site. Persist the backend SQLite directory across restarts or set up PostgreSQL before scaling beyond a single instance. Render's free web services can spin down after inactivity; choose an appropriate instance for continuous availability. See [Render's FastAPI guide](https://render.com/docs/deploy-fastapi), [Python version settings](https://render.com/docs/python-version), and [free-service limits](https://render.com/docs/free).
 
 ### Hosted Version
 
@@ -178,21 +177,31 @@ The recipe dataset includes recipe-level ingredients and nutrition values but no
 
 ## NutriPlan AI chatbot
 
-The React app includes a floating **NutriPlan AI – Your Personal Diet Assistant** chat panel. The frontend keeps the current conversation and profile in page memory and sends at most the latest 12 turns to FastAPI. The backend calls the OpenAI Responses API using the official Python SDK; the API key never enters the browser bundle. The model can use only the allow-listed tools for recipe search, recipe details, the existing age-aware nutrition estimator and Gym Diet Plan engine, and FoodSwap meal comparison. Plan generation creates a draft; a separate **Save to My Plan** action stores it in this browser. Add/replace recipe actions are separately validated by FastAPI and re-read nutrition from the dataset.
+The React app includes a floating **NutriPlan AI – Your Personal Diet Assistant** chat panel. The frontend keeps the current conversation and profile in page memory and sends at most the latest 12 turns to FastAPI. Local Ollama inference is the default; the backend uses a narrow allow-list of tools backed by the existing recipe dataset, age-aware nutrition estimator, Gym Diet Plan engine, and FoodSwap service. External AI is disabled unless `AI_PROVIDER=openai` is explicitly configured. Plan generation creates a draft; a separate **Save to My Plan** action stores it in this browser. Add/replace recipe actions are separately validated by FastAPI and re-read nutrition from the dataset.
 
 Configure the server-side settings in the project-root `.env` file (copy `.env.example` once, then edit it):
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `OPENAI_API_KEY` | Required secret for live assistant replies; keep it server-side | unset |
-| `OPENAI_MODEL` | OpenAI Responses model; set a model enabled for your API project | `gpt-6-luna` |
+| `AI_PROVIDER` | `ollama` (default) or explicit external `openai` | `ollama` |
+| `OLLAMA_BASE_URL` | Trusted local/private Ollama server URL | `http://127.0.0.1:11434` |
+| `OLLAMA_MODEL` | Model installed in Ollama | `qwen3:4b-instruct-2507-q4_K_M` |
+| `OLLAMA_TIMEOUT_SECONDS` | Local inference timeout | `600` |
+| `OLLAMA_THINK` | Enable Qwen's extended thinking mode (slower on CPU) | `false` |
+| `OLLAMA_MAX_OUTPUT_TOKENS` | Local model response-token cap | `512` |
+| `OLLAMA_CONTEXT_LENGTH` | Context window for local chat and tool results | `8192` |
+| `AI_MAX_OUTPUT_TOKENS` | Legacy alias for the OpenAI response-token limit | `1400` |
+| `OPENAI_API_KEY` | Optional server-only key, used only with `AI_PROVIDER=openai` | unset |
+| `OPENAI_MODEL` | Explicit OpenAI Responses model setting | `gpt-6-luna` |
 | `OPENAI_TIMEOUT_SECONDS` | Provider request timeout (bounded by the backend) | `35` |
-| `OPENAI_MAX_RETRIES` | SDK retries | `1` |
+| `OPENAI_MAX_RETRIES` | SDK retries when external OpenAI is explicitly enabled | `1` |
 | `OPENAI_MAX_OUTPUT_TOKENS` | Response output cap (bounded to 256–8192) | `1400` |
 | `CHAT_RATE_LIMIT_PER_MINUTE` | Per-IP in-memory request limit | `12` |
+| `API_ADMIN_TOKEN` | Private token required to create projects and client keys | unset |
+| `NUTRIPLAN_DB_PATH` | SQLite database path | `FastAPI_Backend/data/api_platform.sqlite3` |
 | `CORS_ORIGINS` | Comma-separated exact deployed frontend origins; local development origins are built in | blank |
 
-The lightweight `GET /api/chat/health` check never calls the model. It distinguishes a missing key, configured-but-unverified setup, and the last provider result observed by this backend process. A key's presence alone is not proof of access; the UI says **AI responded** only after a real response succeeded. Invalid credentials, permission/model access, rate limit, quota/billing, timeout, network, and provider failures produce distinct safe messages. The first actual chat request verifies provider access. The default model is configurable; use a model available to your OpenAI project. No model call is made to render the dashboard.
+The lightweight `GET /api/chat/health` check does not generate tokens. With Ollama it checks the local `/api/tags` endpoint and confirms the configured model is installed. It cannot guarantee future inference availability. The UI shows a connected state only after a successful readiness check; a real chat request is needed to confirm actual generation. Ollama does not send prompts to OpenAI/Gemini/Claude. If the model or server is absent, the chat displays a clear error and the deterministic APIs keep working.
 
 Chat endpoints:
 
@@ -201,9 +210,54 @@ Chat endpoints:
 - `POST /api/chat/plan-action` — validates a selected recipe against the dataset, diet, and exclusions before adding or replacing a meal and recalculating selected meal totals.
 - Chat `compare_meals` — uses the same FoodSwap candidate filters and ranking logic; chat comparisons do not infer or rank by prices.
 
-There is no account system or database-backed chat history in this repository. Conversation data is kept in page memory and sent to FastAPI with the recent turns; the backend does not persist it or log message content. When you send a message, that request (and only the profile fields you entered) is sent server-side to OpenAI to generate a response. OpenAI processes API requests under the data controls and retention settings applicable to your API account; this app does not promise zero retention. The **New chat** action clears page-session messages and optional profile fields. Browser plan data is stored in local storage, which is device-local and not encrypted. The rate limiter is process-local, so it resets on restart and should be replaced by shared infrastructure before a multi-worker or public production deployment. Recipe filtering is conservative keyword screening where supported, but the dataset has no structured allergens or cross-contact data; never treat a result as allergy-safe. Nutrition is reported per the dataset's recorded serving, with no ingredient weights or verified quantities.
+The existing browser chatbot keeps chat in page memory; the legacy `/api/chat` route does not persist messages. API platform clients use hashed project keys. Persistent API chat history is off by default and is saved only when a client sends `persist_history: true`; it can then be retrieved or deleted by that same client key. Admin/client metadata and non-content usage measurements are stored in SQLite. If external OpenAI is explicitly enabled, submitted messages/profile fields are sent to OpenAI under that account's data controls; this app does not promise zero retention. Browser plan data remains device-local and not encrypted. The rate limiter is process-local, so use shared infrastructure before multi-worker public deployment. Recipe filtering is conservative keyword screening and cannot guarantee allergy safety. Nutrition is dataset-reported per recipe serving; ingredient weights and verified quantities are unavailable.
 
 The estimator uses Mifflin–St Jeor for adult resting-energy estimates and the existing activity multipliers. It presents ranges when requested, modest goal adjustments, and configurable protein rules: 1.4–2.0 g/kg/day for exercising adults under 65, 1.0–1.2 g/kg/day for adults 65+, and 0.8 g/kg/day when there is no regular training. These values are planning estimates, not medical measurements. Under-18 users and profiles flagged for individualized medical support receive safe guidance and no personalized target or gym plan. Pregnancy, eating-disorder concerns, kidney disease, and other medical needs should be handled with a qualified clinician or registered dietitian.
+
+## Reusable API platform
+
+The versioned REST API reuses the existing nutrition and recipe services rather than copying their data. OpenAPI is available at `/docs`; API v1 routes are under `/api/v1`. The local database uses Python's SQLite support, so it does not need a paid database service for one local instance. API keys are shown once, stored as salted PBKDF2 hashes, and can be revoked. A project can set its own name, enabled modules, request rate, and assistant instructions. Project chat is isolated by API client key; history is stored only when explicitly requested.
+
+Core routes:
+
+- `GET /api/v1/health/live`, `GET /api/v1/health/ready` — API and dataset/database health.
+- `GET /api/v1/ai/status`, `GET /api/v1/ai/models` — Ollama/provider readiness and installed models.
+- `POST /api/v1/projects` — create a project (requires `X-Admin-Token`).
+- `POST /api/v1/projects/{project_id}/clients` — create a client and return its API key once (admin only).
+- `GET /api/v1/projects/me`, `GET /api/v1/projects/me/usage` — authenticated project identity and actual request counters.
+- `POST /api/v1/chat` — local-model chat with an optional `persist_history: true` consent field.
+- `GET/DELETE /api/v1/chat/history/{conversation_id}` — read or clear only the authenticated client's saved conversation.
+- `GET /api/v1/recipes`, `GET /api/v1/recipes/{recipe_id}` — dataset-backed recipe search/details.
+- `POST /api/v1/nutrition/calculate`, `/api/v1/nutrition/daily-requirements`, `/api/v1/nutrition/meal-plan`, `/api/v1/nutrition/analyze-meal` — existing safe estimator, planner, and dataset arithmetic.
+
+If `API_ADMIN_TOKEN` is blank, generate a private local admin token in PowerShell. This updates only the ignored root `.env`; it never prints the token:
+
+```powershell
+$adminToken = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+$lines = Get-Content -LiteralPath .env
+$found = $false
+$lines = $lines | ForEach-Object { if ($_ -match '^API_ADMIN_TOKEN=') { $found = $true; if ($_ -eq 'API_ADMIN_TOKEN=') { 'API_ADMIN_TOKEN=' + $adminToken } else { $_ } } else { $_ } }
+if (!$found) { $lines += "API_ADMIN_TOKEN=$adminToken" }
+Set-Content -LiteralPath .env -Value $lines -Encoding utf8
+Remove-Variable adminToken
+```
+
+Restart FastAPI after changing `.env`. To create a future project and a client key, run this from the repository root after starting the backend; it prints the generated client key once to your local PowerShell session. Do not paste it into chat or put it in browser code:
+
+```powershell
+$adminToken = ((Get-Content -LiteralPath .env | Where-Object { $_ -match '^API_ADMIN_TOKEN=' } | Select-Object -Last 1) -replace '^API_ADMIN_TOKEN=', '')
+$adminHeaders = @{ 'X-Admin-Token' = $adminToken }
+$project = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/v1/projects' -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body '{"project_id":"studymate","name":"StudyMate","description":"A second app","system_prompt":"Explain study topics clearly.","enabled_modules":["chat"],"rate_limit_per_minute":30}'
+$client = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/v1/projects/studymate/clients' -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body '{"name":"StudyMate server"}'
+$client.api_key
+Remove-Variable adminToken,adminHeaders
+```
+
+The included TypeScript SDK is in `sdk/typescript`; it is intended for trusted server-side callers. A browser frontend should call its own trusted backend rather than embed a private key.
+
+Install Ollama and download a model suited to the machine. A small quantized model needs several GB of memory and is slower on CPU; larger models require more RAM/VRAM. `qwen3:4b-instruct-2507-q4_K_M` is the project default and must still be installed explicitly with `ollama pull qwen3:4b-instruct-2507-q4_K_M`. The original `qwen3:4b` tag is a thinking model and can be much slower on CPU. Some models vary in tool-calling quality. There is no model bundled in Git, and the app reports unavailable until the model exists. The supplied recipe data is not an ingredient nutrient database, so no invented food micronutrient endpoint is exposed.
+
+This foundation does not yet provide JWT user accounts, PostgreSQL/Alembic migrations, a browser-based API management dashboard, model downloads/management, production-grade distributed rate limiting, or real token-by-token streaming. SQLite and local rate limits are suitable for development/single-instance evaluation, not a horizontally scaled public service. See the API schema for current request/response contracts; do not treat the current setup as audited production security.
 
 ### Fix My Plate, kitchen search, and meal logs
 

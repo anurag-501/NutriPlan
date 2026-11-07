@@ -16,11 +16,33 @@ from chat_api import (
 )
 from chat_service import (
     TOOL_DEFINITIONS,
+    ChatConfig,
     ChatService,
     ChatServiceError,
     NutritionToolArgs,
     PlanToolArgs,
 )
+
+
+def test_local_inference_config_defaults_to_non_thinking_instruct_model(monkeypatch):
+    for name in (
+        "AI_PROVIDER",
+        "OLLAMA_MODEL",
+        "OLLAMA_TIMEOUT_SECONDS",
+        "OLLAMA_THINK",
+        "OLLAMA_MAX_OUTPUT_TOKENS",
+        "OLLAMA_CONTEXT_LENGTH",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    config = ChatConfig()
+
+    assert config.provider == "ollama"
+    assert config.ollama_model == "qwen3:4b-instruct-2507-q4_K_M"
+    assert config.ollama_timeout_seconds == 600
+    assert config.ollama_think is False
+    assert config.ollama_max_output_tokens == 512
+    assert config.ollama_context_length == 8192
 
 
 class FakeResponses:
@@ -49,7 +71,12 @@ def response(text="", output=None):
 
 
 def config(api_key="test-key"):
-    return SimpleNamespace(api_key=api_key, model="test-model", timeout_seconds=2, max_retries=0)
+    return SimpleNamespace(
+        provider="openai", api_key=api_key, model="test-model", timeout_seconds=2,
+        max_retries=0, max_output_tokens=1400, ollama_base_url="http://127.0.0.1:11434",
+        ollama_model="qwen3:4b", ollama_timeout_seconds=2,
+        ollama_think=False, ollama_max_output_tokens=512, ollama_context_length=8192,
+    )
 
 
 def valid_search_arguments(**changes):
@@ -85,6 +112,59 @@ def test_chat_provider_not_configured_has_clear_error(mock_dataset):
     assert error.value.status_code == 503
     assert "OPENAI_API_KEY" in error.value.public_message
     assert service.availability == "missing_configuration"
+
+
+def test_local_provider_uses_validated_recipe_tool_without_openai(mock_dataset, monkeypatch):
+    class FakeOllama:
+        def __init__(self):
+            self.calls = []
+
+        async def chat(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{"function": {"name": "search_recipes", "arguments": valid_search_arguments()}}],
+                }
+            return {"role": "assistant", "content": "Recipe 1 is in the bundled dataset."}
+
+    local_config = SimpleNamespace(
+        provider="ollama", api_key="", ollama_base_url="http://127.0.0.1:11434",
+        ollama_model="qwen3:4b", ollama_timeout_seconds=2, max_output_tokens=256,
+        ollama_think=False, ollama_max_output_tokens=256, ollama_context_length=8192,
+        model="unused", timeout_seconds=2, max_retries=0,
+    )
+    service = ChatService(config=local_config)
+    fake = FakeOllama()
+    monkeypatch.setattr(service, "_get_ollama_client", lambda: fake)
+
+    result = asyncio.run(service.reply(ChatRequest(messages=[ChatTurn(role="user", content="Find Recipe 1")]), mock_dataset))
+
+    assert result["message"] == "Recipe 1 is in the bundled dataset."
+    assert result["recipes"][0]["recipe_id"] == 1
+    assert fake.calls[0]["model"] == "qwen3:4b"
+    assert all(tool["type"] == "function" for tool in fake.calls[0]["tools"])
+    assert any(message.get("role") == "tool" for message in fake.calls[1]["messages"])
+
+
+def test_local_provider_reports_model_unavailable_without_faking_reply(mock_dataset, monkeypatch):
+    class MissingModel:
+        async def chat(self, **kwargs):
+            from local_ai import LocalAIError
+            raise LocalAIError("model_unavailable", "Run ollama pull qwen3:4b.")
+
+    service = ChatService(config=SimpleNamespace(
+        provider="ollama", api_key="", ollama_base_url="http://127.0.0.1:11434",
+        ollama_model="qwen3:4b", ollama_timeout_seconds=2, max_output_tokens=256,
+        ollama_think=False, ollama_max_output_tokens=256, ollama_context_length=8192,
+        model="unused", timeout_seconds=2, max_retries=0,
+    ))
+    monkeypatch.setattr(service, "_get_ollama_client", lambda: MissingModel())
+    with pytest.raises(ChatServiceError) as error:
+        asyncio.run(service.reply(ChatRequest(messages=[ChatTurn(role="user", content="Hello")]), mock_dataset))
+    assert error.value.category == "model_unavailable"
+    assert "ollama pull" in error.value.public_message
 
 
 def test_mocked_ai_function_call_searches_real_recipe_data(mock_dataset):
@@ -159,6 +239,40 @@ def test_chat_recipe_search_applies_vegetarian_and_allergy_exclusions(mock_datas
     assert result["total_matches"] == 0
     assert cards == {}
     assert "allergy-safe" in notes[0]
+
+
+def test_recipe_search_discards_model_invented_constraints(mock_dataset):
+    dataset = mock_dataset.copy()
+    dataset["Name"] = [f"Tofu Dinner {index}" for index in range(len(dataset))]
+    dataset["RecipeIngredientParts"] = 'c("tofu", "rice", "salt")'
+    dataset["_ingredients_parsed"] = [frozenset({"tofu", "rice", "salt"})] * len(dataset)
+    dataset["ProteinContent"] = [30.0 + index for index in range(len(dataset))]
+    dataset["TotalTime"] = "PT90M"
+    arguments = valid_search_arguments(
+        query="high-protein vegetarian dinner",
+        dietary_preference="vegetarian",
+        meal_category="main meal",
+        target_calories=500,
+        calorie_tolerance=0,
+        min_protein=25,
+        max_minutes=45,
+        include_ingredients=["beans", "lentils", "tofu"],
+    )
+
+    service = ChatService(config=config(), client=FakeOpenAIClient())
+    result, cards, _ = service._search_recipes(
+        arguments,
+        ChatProfile(dietary_preference="vegetarian"),
+        dataset,
+        "I want a high-protein vegetarian dinner.",
+    )
+
+    assert result["total_matches"] == len(dataset)
+    assert result["applied_filters"]["target_calories"] is None
+    assert result["applied_filters"]["max_minutes"] is None
+    assert result["applied_filters"]["included_ingredients"] == []
+    assert result["applied_filters"]["minimum_protein_g"] == 25
+    assert cards and all(card["dietary_preference"] == "vegetarian" for card in cards.values())
 
 
 def test_calorie_tool_uses_explicit_profile_and_handles_minors(mock_dataset):

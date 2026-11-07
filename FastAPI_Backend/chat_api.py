@@ -180,13 +180,15 @@ def _get_dataset(request: Request) -> pd.DataFrame:
 
 
 @router.get("/api/chat/health")
-def chat_health(service: Annotated[ChatService, Depends(get_chat_service)]):
+async def chat_health(service: Annotated[ChatService, Depends(get_chat_service)]):
+    readiness = await service.probe()
     return {
-        "provider": "openai",
+        "provider": readiness["provider"],
         "configured": service.is_configured,
-        "status": service.availability,
+        "status": readiness["status"],
         "status_message": service.availability_message,
-        "model": service.model,
+        "model": readiness["model"],
+        "available_models": [item.get("name") for item in readiness.get("models", [])],
         "history": "current page session only; no backend history is stored",
     }
 
